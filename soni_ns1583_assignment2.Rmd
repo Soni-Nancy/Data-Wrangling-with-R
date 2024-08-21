@@ -1,0 +1,269 @@
+---
+title: "Assignment 2"
+author: "Nancy Soni"
+date: "2024-02-15"
+output:
+  html_document: default
+---
+
+```{r, warning=FALSE}
+library(tidyverse)
+library(Lahman)
+library(nycflights13)
+library(gapminder)
+```
+
+## Problem 1
+
+#### 1.1
+
+Create 3 data frames (or tibbles). Combine the 3 data frames into one.
+
+```{r}
+The_Fellowship_Of_The_Ring = read_csv("https://raw.githubusercontent.com/jennybc/lotr-tidy/master/data/The_Fellowship_Of_The_Ring.csv", show_col_types = FALSE)
+
+The_Two_Towers = read_csv("https://raw.githubusercontent.com/jennybc/lotr-tidy/master/data/The_Two_Towers.csv", show_col_types = FALSE)
+
+The_Return_Of_The_King = read_csv("https://raw.githubusercontent.com/jennybc/lotr-tidy/master/data/The_Return_Of_The_King.csv", show_col_types = FALSE)
+
+(Lord_Of_The_Rings = rbind(The_Fellowship_Of_The_Ring, The_Two_Towers, The_Return_Of_The_King))
+```
+
+#### 1.2
+
+Tidy the combined data frame by creating new variables “Gender” and “Words”
+
+```{r}
+Lord_Of_The_Rings = Lord_Of_The_Rings %>%
+  pivot_longer('Female':'Male', names_to = "Gender", values_to = "Words")
+
+head(Lord_Of_The_Rings, 10)
+```
+
+#### 1.3
+
+Use the combined data frame to answer the following questions
+
+```{r}
+#a How many words were spoken in each movie?
+
+total_words_movie <- Lord_Of_The_Rings %>% 
+   group_by(Film) %>% 
+   summarise(total_words_per_Film = sum(Words)) %>% 
+   select(Film, total_words_per_Film)
+ 
+head(total_words_movie)
+```
+
+```{r}
+#b How many words were spoken by each gender in total?
+
+total_words_gender <- Lord_Of_The_Rings %>% 
+    group_by(Gender) %>% 
+    summarise(total_words_per_Gender = sum(Words)) %>% 
+    select(Gender, total_words_per_Gender)
+
+head(total_words_gender)
+```
+
+```{r}
+#c How many words were spoken by each race in total?
+
+total_words_Race <- Lord_Of_The_Rings %>% 
+    group_by(Race) %>% 
+    summarise(total_words_per_Race = sum(Words)) %>% 
+    select(Race, total_words_per_Race)
+ 
+head(total_words_Race)
+```
+
+#### 1.4
+
+Create a 3x4 data frame with total number of words by movie (rows) and race (columns), calling it by_race_film.
+
+```{r, warning=FALSE}
+by_race_film <- Lord_Of_The_Rings %>%
+  group_by(Film, Race) %>%
+  summarise(Total_Words = sum(Words)) %>%
+  pivot_wider(names_from = Race, values_from = Total_Words)
+ 
+head(by_race_film)
+```
+
+## Problem 2
+
+#### 2.1
+
+Use the People data frame in the Lahman package to create a tibble with exactly the same variables as the babynames data frame (except the sex), and ordered in the same way. For year, use the year of birth. For name, use the first name (variable nameFirst). The final table should look like this (where prop is the proportion of names in a specific birthyear)
+
+```{r}
+people_t = tibble(People)
+
+player_names = people_t %>% 
+  group_by(birthYear, nameFirst) %>%
+  summarise(n = n()) %>%
+  mutate(prop = n / sum(n)) %>%
+  arrange(birthYear, desc(prop))
+
+head(player_names, 10)
+```
+
+#### 2.2
+
+Create a tibble of players showing just the playerID, first name, last name, given name, and career total (meaning, summed over all the years and all stints) of games (that is, the G variable) according to the Fielding data frame.
+
+```{r}
+fielding_t = tibble(Fielding)
+
+players_tibble = merge(fielding_t, people_t, by = "playerID") %>%
+  group_by(playerID) %>%
+  summarise(firstName = first(nameFirst), lastName = first(nameLast), 
+            givenName = first(nameGiven), career_total = sum(G, na.rm = TRUE))
+
+head(players_tibble, 10)
+```
+
+#### 2.3
+
+In your data frame obtained in (2), replace the two separate variables containing first and last names by a variable for full name by combining the first name and last name with a space between them.
+
+```{r}
+Combined = players_tibble %>% 
+  mutate(Name = paste(firstName, lastName, sep = " "), .keep = "unused", .before = "givenName")
+
+head(Combined, 10)
+```
+
+#### 2.4
+
+Use the data frame you have created in part (2) to determine the five most popular first names in baseball among players who played at least 500 games.
+
+```{r}
+top_five = players_tibble %>% 
+  filter(career_total >= 500) %>% 
+  group_by(firstName) %>%
+  count(firstName) %>% 
+  arrange(desc(n))
+
+head(top_five, 5)
+```
+
+## Problem 3
+
+#### 3.1
+
+Using the nycflights13 data only for September 12, 2013, • plot arrival delays (y-axis) against departure delays (x-axis), using color labels for the three origin airports. • Add a line x=y (45 degrees) to the plot. How can such a line add information to the plot? • Add a title, new labels for the axis as “Departure delay” and “Arrival Delay”, a new name for the legend as “Departure airport”, and new key labels for the legend (“Newark”, “Kennedy” and “La Guardia”).
+
+```{r}
+flights_120913 = flights %>% filter(year == 2013, month == 9, day == 12)
+
+flights_120913 %>% 
+  ggplot(aes(dep_delay, arr_delay, color = origin)) + geom_point(na.rm = TRUE) +
+  geom_abline(slope = 1, intercept = 0) +
+  labs(title = "Arrival Delay vs Departure Delay on September 12, 2013",
+       x = "Departure Delay", y = "Arrival Delay",color = "Departure airport") +
+  scale_color_manual(values = c("EWR" = "red", "JFK" = "blue", "LGA" = "green"),
+                     labels = c("Newark", "Kennedy", "La Guardia"))
+```
+
+By adding a x=y line gives us the information that the two variables, arrival delay and departure delay are almost positively proportional. Which means, a flight which was delayed for x hours in departing will be delayed by x hours in arrival. But as we can see for the departure delay less than 50 mins, there are considerable number of flights which delayed in departing for x hours but got delayed more than x hours in arriving.
+
+#### 3.2
+
+Filter the entire flights data frame so that the carrier is either United, American or Delta airlines. Add a new variable named "make_up" that measures the time made-up by each flight during the flight to the data frame "flights". Plot a histogram of this variable. Create a single plot that shows the distributions of make_up by carrier. Do you observe any differences among carriers with respect to make-up time?
+
+```{r, warning=FALSE}
+flights %>% filter(carrier %in% c("UA","AA", "DL")) %>% 
+  mutate(make_up = dep_delay - arr_delay) %>% 
+  ggplot(aes(x = make_up, fill = carrier)) +
+  geom_histogram(binwidth = 10, alpha = 0.8) +
+  labs(title = "Make-up Time Distribution by Carrier",
+       x = "Make-up Time (Departure Delay - Arrival Delay)", y = "Frequency")
+```
+
+From the graph, it can be observed that all the 3 flights have made-up of approx 0-15 mins of delay in their maximum number of flights. While we can also see that United Airlines has made-up with its delayed time the highest (approx 15000 flights) followed by Delta (approx 12500 flights) and at last American Airlines (approx 8000 flights). But that also tells us that United has maximum number of flights which got delayed while American has minimum.
+
+#### 3.3
+
+Create a bar plot to compare the mean arrival delays for different carriers, arranged in descending order of mean arrival delays. Flip the plot to have carriers on the vertical axis.
+
+```{r}
+flights %>% 
+  group_by(carrier) %>% 
+  summarise(mean_arr_delay = mean(arr_delay, na.rm = TRUE)) %>% 
+  arrange(desc(mean_arr_delay)) %>% 
+  ggplot(aes(x = reorder(carrier, mean_arr_delay), y = mean_arr_delay)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Mean Arrival Delays by Carrier",
+       x = "Carrier", y = "Mean Arrival Delay (minutes)") +
+  coord_flip()
+```
+
+## Problem 4
+
+#### 4.1
+
+Using the 2007 gapminderdata, create a scatter plot of log_10(gdpPercap) (x-axis) versus lifeExp (y-axis), using a different color for each continent and size proportional to the population. Add a smoother to the plot.
+
+```{r, warning=FALSE}
+gapminder %>% 
+  filter(year == 2007) %>% 
+  ggplot(aes(x = log10(gdpPercap), y = lifeExp)) +
+  geom_point(aes(color = continent, size = pop), alpha = 0.5) +
+  geom_smooth() +
+  scale_size_continuous(labels = scales::comma)
+```
+
+#### 4.2
+
+Add a title and axis labels : GDP (per capita) and Life expectancy to the figure.
+
+```{r, warning=FALSE}
+gapminder %>% 
+  filter(year == 2007) %>% 
+  ggplot(aes(x = log10(gdpPercap), y = lifeExp)) +
+  geom_point(aes(color = continent, size = pop), alpha = 0.5) +
+  geom_smooth() +
+  labs(title = "GDP (per capita) vs. Life expectancy",
+       x = "GDP (per capita)", y = "Life expectancy",
+       size = "Population", color = "Continent") +
+  scale_size_continuous(labels = scales::comma) + 
+  theme(plot.title = element_text(size = 15)) + 
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+#### 4.3
+
+Create a plot similar to the one in (1) only with countries with life expectancy over 75. Add appropriate titled and axis labels.
+
+```{r, warning=FALSE}
+gapminder %>% 
+  filter(lifeExp > 75) %>% 
+  ggplot(aes(x = log10(gdpPercap), y = lifeExp)) +
+  geom_point(aes(color = continent, size = pop), alpha = 0.5) +
+  geom_smooth() +
+  labs(title = "GDP (per capita) vs. Life expectancy (Life expectancy > 75)",
+       x = "GDP (per capita)", y = "Life expectancy", 
+       size = "Population", color = "Continent") +
+  scale_size_continuous(labels = scales::comma) + 
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+#### 4.4
+
+Label every country with population over 35 million in plot obtained in (3).
+
+```{r, warning=FALSE}
+countries_to_label <- subset(gapminder, lifeExp > 75 & pop > 35000000)
+
+ggplot(subset(gapminder, lifeExp > 75), aes(x = log10(gdpPercap), y = lifeExp)) +
+  geom_point(aes(color = continent, size = pop), alpha = 0.6) +
+  geom_smooth() +
+  geom_text(data = countries_to_label, 
+            aes(label = country, color = continent), vjust = -1) +
+  labs(title = "GDP (per capita) vs. Life expectancy (Life expectancy > 75)",
+       x = "GDP (per capita)", y = "Life expectancy",
+       color = "Continent", size = "Population") +
+  scale_size_continuous(labels = scales::comma) + 
+  theme(plot.title = element_text(hjust = 0.5))
+```

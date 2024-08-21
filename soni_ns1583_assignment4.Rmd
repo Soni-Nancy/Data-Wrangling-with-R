@@ -1,0 +1,342 @@
+---
+title: "Untitled"
+author: "Nancy Soni"
+date: "2024-03-24"
+output: html_document
+---
+
+```{r, warning=FALSE}
+library(tidyverse)
+library(rvest)
+library(jsonlite)
+library(httr)
+library(curl)
+library(tidytext)
+library(gutenbergr)
+```
+
+## Problem 1
+
+Go to the Wikipedia page on Women’s World Cup Alpine Skiing:
+
+<https://en.wikipedia.org/wiki/List_of_FIS_Alpine_Ski_World_Cup_women%27s_championsLinks> to an external site.
+
+#### (1)
+
+Form a data frame of the 1st, 2nd and 3rd place holders for the overall podium.
+
+```{r}
+url = "https://en.wikipedia.org/wiki/List_of_FIS_Alpine_Ski_World_Cup_women%27s_champions"
+
+overall_podium <- url %>%
+  read_html() %>%
+  html_nodes("table") %>%
+  html_table(fill = TRUE)
+
+top_place_holders = data.frame(overall_podium[[2]])
+```
+
+#### (2)
+
+Clean up the names by dropping the parentheses and numbers.
+
+```{r}
+cleaner = function(x){
+  str_replace_all(x, c(" \\([0-9]+\\)" = "", "Annemarie Moser-Pröll" = "Annemarie Pröll"))}
+
+top_place_holders = map_df(top_place_holders, cleaner)
+
+head(top_place_holders,10)
+```
+
+#### (3)
+
+Repeat the above steps to create a cleaned data frame for the champions in each event (category).
+
+```{r}
+champions_category = overall_podium[[4]]
+
+champions_category = map_df(champions_category, cleaner)
+
+head(champions_category,10)
+```
+
+#### (4)
+
+Find the top three champions in the “overall” and “downhill” categories (i.e., the three skiers who were champions in these two specific events on the maximum number of occasions).
+
+```{r}
+top_3_in_Overall = champions_category %>% 
+  group_by(Overall) %>% 
+  summarise(Count = n()) %>%
+  arrange(desc(Count)) %>%
+  top_n(3, wt = Count)
+
+top_3_in_Overall
+```
+
+```{r}
+top_3_in_Downhill = champions_category %>% 
+  group_by(Downhill) %>% 
+  summarise(Count = n()) %>%
+  arrange(desc(Count)) %>%
+  top_n(3, wt = Count)
+
+top_3_in_Downhill
+```
+
+## Problem 2
+
+#### (1)
+
+Obtain your free API for <https://spoonacular.com/food-api>
+
+#### (2)
+
+Use it to find out all Italian recipes available on the website that have carbohydrates not exceeding 30 grams. How many such recipes are there? Find the top ten having the lowest carbs. Present your output as a 10x3 tibble, where the column names are “Recipe” (the title of the recipe), “ID” (the ID of the recipe), and “Carbs” (the carb content).
+
+```{r, warning=FALSE}
+api_key = "8a62c2b26ccb4443aa73ef8eb41ef8c4"
+
+url <- "https://api.spoonacular.com"
+
+recipe_endpoint = paste0(url, "/recipes/findByNutrients")
+
+query_params <- list(
+  apiKey = api_key,
+  cuisine = "italian",
+  number = 100,
+  maxCarbs = 30)
+
+recipe_response <- GET(recipe_endpoint, query = query_params)
+
+recipes <- content(recipe_response, as = "text", encoding = "UTF-8") %>%
+  fromJSON(flatten = TRUE) %>% as_tibble()
+```
+
+```{r}
+lowest_carbs <- recipes %>%
+  mutate(carbs = str_remove_all(carbs, "g"), carbs = as.numeric(carbs)) %>%
+  arrange(carbs) %>%
+  select(Recipe = title, ID = id, Carbs = carbs)
+
+head(lowest_carbs,10)
+```
+
+#### (3)
+
+Find 10 types of Riesling wines whose prices do not exceed \$50 and present your results as a 10x3 tibble, where the columns represent the title of the wine, its ID and its price.
+
+```{r}
+wine_endpoint = paste0(url, "/food/wine/recommendation")
+
+riesling_wine_params <- list(
+  apiKey = api_key,
+  wine = "Riesling",
+  number = 100,
+  maxPrice = 50)
+
+riesling_wine_response <- GET(wine_endpoint, query = riesling_wine_params)
+
+riesling_wines <- content(riesling_wine_response, as = "text", encoding = "UTF-8") %>%
+  fromJSON(flatten = TRUE) %>% as_tibble()
+
+riesling_wine_data <- riesling_wines$recommendedWines %>%
+  select(Title = title, ID = id, Price = price)
+
+head(riesling_wine_data, 10)
+```
+
+## Problem 3
+
+#### (1)
+
+Find the gutenberg IDs of Treasure Island and The Strange Case of Dr. Jekyll and Mr. Hyde by Robert Louis Stevenson using the gutenberg_metadata data frame available in the gutenberg package.
+
+```{r}
+library(gutenbergr)
+
+gutenberg_metadata %>% 
+  filter(title %in% c("Treasure Island", "The Strange Case of Dr. Jekyll and Mr. Hyde"), author == "Stevenson, Robert Louis") %>%
+  select(gutenberg_id, title)
+```
+
+#### (2)
+
+Download the texts of these two books from the gutenberg package.
+
+```{r}
+the_strange_case = gutenberg_download(42)
+treasure_island = gutenberg_download(27780)
+```
+
+#### (3)
+
+Find the 10 most common words (that are not stop words) in each novel.
+
+```{r}
+the_strange_case_words = 
+  the_strange_case %>% 
+  mutate(linenumber = row_number()) %>%
+  unnest_tokens(word, text) %>% 
+  mutate(word = str_extract(word, "[a-z]+")) %>%
+  anti_join(stop_words, by = "word")
+
+treasure_island_words = 
+  treasure_island %>% 
+  mutate(linenumber = row_number()) %>%
+  unnest_tokens(word, text) %>% 
+  mutate(word = str_remove_all(word, "_")) %>% 
+  anti_join(stop_words, by = "word")
+
+top_10_words_strange_case = the_strange_case_words %>%
+  count(word, sort = TRUE) %>%
+  head(10)
+top_10_words_strange_case
+
+top_10_words_treasure_island <- treasure_island_words %>%
+  mutate(word = str_extract(treasure_island_words$word, "[a-z]+")) %>%
+  anti_join(stop_words, by = "word") %>%
+  count(word, sort = TRUE) %>%
+  head(10)
+top_10_words_treasure_island
+```
+
+#### (4)
+
+##### (i)
+
+Create a visualization on the similarity/dissimilarity between the proportions of words that are not stop words) in the two books and calculate the correlation between them.
+
+```{r, warning=FALSE}
+frequency <- bind_rows(mutate(the_strange_case_words, Book = "The Strange Case"),
+                       mutate(treasure_island_words, Book = "Treasure Island")) %>%
+  count(Book, word) %>%
+  group_by(Book) %>%
+  mutate(proportion = n/sum(n)) %>% 
+  select(-n) %>% 
+  pivot_wider(names_from = "Book", values_from = "proportion")
+
+ggplot(frequency, aes(x = `The Strange Case`, y = `Treasure Island`)) + 
+  geom_abline(color = "red", lty = 2, lwd=2) +
+  geom_point(color="grey")+
+  geom_text(aes(label = word), check_overlap = TRUE) +
+  scale_x_log10() +
+  scale_y_log10()
+```
+
+```{r}
+frequency %>%
+  filter(!is.na(`The Strange Case`),!is.na(`Treasure Island`)) %>%
+  select(2:3) %>%
+  cor()
+```
+
+##### (ii)
+
+Find two words that appear with a high frequency in The Strange Case of Dr. Jekyll and Mr. Hyde but not in Treasure Island.
+
+```{r}
+frequent_words_in_strange_case = the_strange_case_words %>%
+  anti_join(treasure_island_words, by = "word") %>%
+  count(word, sort = TRUE) %>%
+  top_n(2)
+frequent_words_in_strange_case
+```
+
+##### (iii)
+
+Find two words that appear with a high frequency in Treasure Island but not in The Strange Case of Dr. Jekyll and Mr. Hyde.
+
+```{r}
+frequent_words_in_treasure_iseland = treasure_island_words %>%
+  anti_join(the_strange_case_words, by = "word") %>%
+  count(word, sort = TRUE) %>%
+  top_n(2)
+frequent_words_in_treasure_iseland
+```
+
+##### (iv)
+
+Find two words that appear with high frequency in both novels.
+
+```{r}
+#words with frequency more than 0.1 in each novel
+strange_case = the_strange_case_words %>% count(word, sort = TRUE) %>% filter(n >= sum(n)/1000)
+treasure = treasure_island_words %>% count(word, sort = TRUE) %>% filter(n >= sum(n)/1000)
+
+#words frequent in both novels
+frequent_words_in_both = inner_join(strange_case, treasure, by = "word") %>%
+  mutate(total_frequency = n.x + n.y) %>%
+  arrange(desc(n.x), desc(n.y)) %>%
+  head(4)
+
+#top 2 frequent words in both novels
+two_frequent_in_both = frequent_words_in_both %>% arrange(desc(total_frequency)) %>% top_n(2)
+```
+
+#### (5)
+
+Find the 10 most common bigrams in Treasure Island that do not include stop words.
+
+```{r}
+top_10_treasure_island_bigrams <- treasure_island %>%
+  unnest_tokens(bigram, text, token = "ngrams", n = 2) %>%
+  filter(!is.na(bigram)) %>%
+  separate(bigram, c("word1", "word2"), sep = " ") %>%
+  filter(!word1 %in% stop_words$word) %>%
+  filter(!word2 %in% stop_words$word) %>%
+  count(word1, word2, sort = TRUE) %>%
+  head(10)
+
+print(top_10_treasure_island_bigrams)
+```
+
+## Problem 4
+
+Consider the texts of the two Robert Louis Stevenson novels "Treasure Island" and " The Strange Case of Dr. Jekyll and Mr. Hyde " in problem 3.
+
+#### (1)
+
+Find the most common "fear" words in The Strange Case of Dr. Jekyll and Mr. Hyde.
+
+```{r}
+nrc_fear <- get_sentiments("nrc") %>% 
+  filter(sentiment == "fear")
+
+the_strange_case_words %>%
+  inner_join(nrc_fear, by = "word") %>%
+  count(word, sort = TRUE) %>% head(10)
+```
+
+#### (2)
+
+Find the top ten strongest negative words in Treasure Island using the afinn lexicon.
+
+```{r}
+afinn_negative <- get_sentiments("afinn") %>% filter(value < 0)
+
+treasure_island_words %>%
+  inner_join(afinn_negative, by = "word") %>%
+  count(word, sort=TRUE) %>% 
+  head(10)
+```
+
+#### (3)
+
+Plot the sentiments in both Treasure Island and The Strange Case of Dr. Jekyll and Mr. Hyde using the Bing Lexicon.
+
+```{r, warning=FALSE}
+sentiment_for_both = bind_rows(mutate(the_strange_case_words, Book = "The Strange Case"),
+                       mutate(treasure_island_words, Book = "Treasure Island")) %>%
+  inner_join(get_sentiments("bing"), by = "word") %>%
+  mutate(index = linenumber %/% 50) %>%  
+  count(Book, index, sentiment) %>%
+  pivot_wider(names_from = "sentiment", values_from = "n") %>%
+  mutate(sentiment = positive - negative)
+
+ggplot(sentiment_for_both, aes(index, sentiment)) +
+  geom_line() +
+  facet_wrap(~Book, ncol = 2, scales="free_x")+
+  geom_smooth(span=.15)
+```

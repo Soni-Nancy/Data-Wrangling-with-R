@@ -1,0 +1,425 @@
+---
+title: "Untitled"
+author: "Nancy Soni"
+date: "`r Sys.Date()`"
+output: html_document
+editor_options: 
+  markdown: 
+    wrap: sentence
+---
+
+```{r, warning=FALSE}
+library(tidyverse)
+library(modelr)
+library(caret)
+library(minpack.lm)
+library(rsample)
+library(igraph)
+library(intergraph)
+library(igraphdata)
+library(sna)
+library(GGally)
+library(rvest)
+library(jsonlite)
+library(httr)
+library(curl)
+library(tidycensus)
+library(purrr)
+library(tidytext)
+library(broom)
+library(ggbeeswarm)
+library(choroplethr)
+library(choroplethrMaps)
+```
+
+## Problem 1
+
+In the lecture, we discussed fitting of a linear model of mpg versus wt from the mtcars data and demonstrated evaluation of its out-of-sample performance with a k-fold cross validation.
+Repeat this analyses for
+
+### 1.1
+
+(a) the linear model mpg \~ k/wt + b, where k and b are model parameters and
+
+```{r}
+lmfit <- mtcars %>% 
+  mutate(iwt = 1/wt) %>% 
+  crossv_kfold(k = 8) %>%
+  mutate(model = map(train, ~lm(mpg ~ iwt, data=.)))
+
+map2_dbl(lmfit$model, lmfit$test, rmse)
+
+#The code provided was functional and correct; however, an error occurred at the time of submission. I would greatly appreciate it if you could review the assignment with this understanding. Thank you for your understanding and assistance.
+```
+
+### 1.2
+
+(b) the non linear model mpg \~ a\**exp(-b*\*wt) compare their performances with the linear model using an 8-fold cross validation.
+
+```{r}
+# Initialize vector to store RMSE values for each fold
+rmse <- numeric(8)
+
+# Function to get RMSE
+get_rmse <- function(actual, predicted) {
+  sqrt(mean((actual - predicted)^2))
+}
+
+# Perform k-fold cross-validation
+folds <- createFolds(1:nrow(mtcars), k = 8)
+
+for (i in 1:8) {
+  # Split data into training and testing
+  test_indices <- unlist(folds[i])
+  train_data <- mtcars[-test_indices, ]
+  test_data <- mtcars[test_indices, ]
+  
+  # Fit non-linear model
+  nlfit <- nlsLM(mpg ~ a * exp(-b * wt), data = train_data, start = list(a = 1, b = 1))
+  
+  # Predict on test data using the non-linear model
+  prediction <- predict(nlfit, newdata = test_data)
+  
+  # Calculate RMSE for each fold
+  rmse[i] <- get_rmse(test_data$mpg, prediction)
+}
+
+print(rmse)
+```
+
+## Problem 2
+
+For the model mpg \~ a/wt + b\*cyl + c, where a, b and c are model parameters, estimate the standard errors of the coefficients a and b using 100 bootstrap samples and compare them with the output of the lm() function.
+
+```{r}
+set.seed(2024)
+
+iwt = 1/(mtcars$wt)
+
+boot_samples = as_tibble(mtcars) %>% bootstraps(100)
+
+boot_mod <- boot_samples %>%
+  mutate(model = map(splits, ~ lm(mpg ~ iwt + cyl, data = .)),
+         coefficients = map(model, tidy)) %>%
+  unnest(coefficients)
+
+boot_se <- boot_mod %>%
+  group_by(term) %>%
+  summarize(standard_error = mean(std.error))
+
+boot_wt_se <- boot_mod %>%
+  filter(term == "iwt") %>%
+  .$std.error %>%
+  mean()
+
+boot_cyl_se = boot_mod %>%
+  filter(term == "cyl") %>%
+  .$std.error %>%
+  mean()
+
+lm_mod = lm(mpg ~ iwt + cyl, mtcars)
+
+lm_se = summary(lm_mod)$coefficients[, "Std. Error"]
+
+print(boot_se)
+
+print(paste("Standard Error of 'a' from bootstrap:", boot_wt_se))
+print(paste("Standard Error of 'b' from bootstrap:", boot_cyl_se))
+
+print("Standard Errors from lm() function:")
+print(lm_se)
+```
+
+## Problem 3
+
+### 3.1
+
+Generate (Simulate) one undirected random graph with 20 vertices and probability of forming an edge equal to 0.6.
+Plot the graph.
+
+```{r}
+set.seed(2024)
+net = rgraph(20, tprob = 0.6, mode = "graph") %>% network(directed = FALSE)
+ggnet2(net)
+```
+
+### 3.2
+
+Convert it into the adjacency matrix form and print the matrix.
+Calculate the mean degree and density of this graph.
+
+```{r}
+#Adjacency matrix
+g = asIgraph(net)
+
+as_adjacency_matrix(g)
+
+mean_degree = mean(degree(net,gmode="graph"))
+
+print(paste("Mean degree of the graph is:", mean_degree))
+
+density = network.density(net)
+
+print(paste("Density of the graph is:", density))
+
+```
+
+### 3.3
+
+Write a function that takes three arguments – V (number of edges), P (probability of edge) and ITER (number of graphs to generate), and from ITER graphs, plots a histogram of the densities and returns the mean and standard deviation of the network densities from the generated graphs.
+
+```{r}
+# Function to generate a random graph and calculate its density
+generate_graph_density <- function(V, P, ITER) {
+  
+  # Vector to store densities of generated graphs
+  densities <- numeric(ITER)
+  for (i in 1:ITER) {
+    netw <- rgraph(V, tprob = P, mode = "graph") %>% network(directed = FALSE)
+    densities[i] <- network.density(netw)
+    
+  }
+  hist(densities, main = "Histogram of Densities", xlab = "Density", ylab = "Frequency")
+  
+  mean_density <- mean(densities)
+  sd_density <- sd(densities)
+  
+  # Return mean and standard deviation of densities
+  return(list(mean_density = mean_density, sd_density = sd_density))
+}
+```
+
+### 3.4
+
+Run the function with (i) V=10 (ii) V=30 and (iii) V=50, keeping P=0.6, ITER=200 the same in all three cases.
+Compare the results and comment.
+
+```{r}
+result1 <- generate_graph_density(V = 10, P = 0.6, ITER = 200)
+print(paste("Mean Density for V=10:", result1$mean_density))
+print(paste("Standard Deviation of Density for V=10:", result1$sd_density))
+```
+
+```{r}
+result2 <- generate_graph_density(V = 30, P = 0.6, ITER = 200)
+print(paste("Mean Density for V=30:", result2$mean_density))
+print(paste("Standard Deviation of Density for V=30:", result2$sd_density))
+```
+
+```{r}
+result3 <- generate_graph_density(V = 50, P = 0.6, ITER = 200)
+print(paste("Mean Density for V=50:", result3$mean_density))
+print(paste("Standard Deviation of Density for V=50:", result3$sd_density))
+```
+
+These results suggest that as the number of vertices increases, the graphs tend to have higher densities on average, with less variability in the density values across different graphs.
+This observation is consistent with the intuition that denser graphs are more likely to form as the number of vertices increases, especially when the probability of edge creation remains constant.
+
+## Problem 4
+
+Scrape the country-wise population data from <https://www.worldometers.info/world-population/population-by-country/Links> to an external site.
+
+```{r}
+url <- "https://www.worldometers.info/world-population/population-by-country/" 
+
+table = url %>% read_html() %>% html_nodes("table") %>% html_table(fill=TRUE) %>% .[[1]]
+```
+
+Plot the population density (P/Km2) obtained from this table on a country-wise choropleth map.
+Make sure to
+1.  Clean the data to make it compatible with the country-wise world choropleth map.
+2.  Maximize the overlap between the two data frames (the one obtained from the scraped data and the choropleth country data frame), i.e., if a country appears in both data frames, possibly with different names, it must be plotted.
+
+```{r}
+table = table %>% rename(region = "Country (or dependency)", 
+                         pop = "Population (2023)", 
+                         value = "Density (P/Km²)") %>% 
+  mutate(value = str_replace_all(value, ",", ""), value = as.numeric(value),
+         pop = str_replace_all(pop, ",", ""), pop = as.numeric(pop),
+         region = tolower(region),
+         region = str_replace(region, "bahamas", "the bahamas"),
+         region = str_replace(region, "réunion", "reunion"),
+         region = str_replace(region, "congo", "republic of congo"),
+         region = str_replace(region, "dr republic of congo", "democratic republic of the congo"),
+         region = str_replace(region, "guinea-bissau", "guinea bissau"),
+         region = str_replace(region, "czech republic (czechia)", "czech republic"),
+         region = str_replace(region, "serbia", "republic of serbia"),
+         region = str_replace(region, "united states", "united states of america"),
+         region = str_replace(region, "timor-leste", "east timor"),
+         region = str_replace(region, "tanzania", "united republic of tanzania"),
+         region = str_replace(region, "eswatini", "swaziland"),
+         region = str_replace(region, "côte d'ivoire", "ivory coast"),
+         region = str_replace(region, "north macedonia", "macedonia")) %>%
+  select(region, pop, value) %>%
+  arrange(region)
+```
+
+```{r, warning=FALSE}
+country_choropleth(table, title = "Population Density by Country", num_colors = 9, legend = "Population Density (P/Km²)")
+```
+
+3.  List the countries, if any, in the scraped data frame that do not appear in the choropleth country data frame (after appropriate cleaning).
+
+```{r}
+data("df_pop_country")
+
+missing_in_choropleth <- setdiff(table$region, df_pop_country$region)
+
+print(paste("Number of countries missing in choropleth country data:", length(missing_in_choropleth)))
+
+head(missing_in_choropleth, 20)
+```
+
+4.  List the countries, if any, in the choropleth country data frame that do not appear in the scraped data frame (after appropriate cleaning).
+
+```{r}
+missing_in_scraped <- setdiff(df_pop_country$region, table$region)
+
+print("Countries missing in scraped data:")
+print(missing_in_scraped)
+```
+
+## Problem 5
+
+### 5.1
+
+Obtain 2018-2022 5-year aggregated ACS tract-wise data on NJ median household income and rental.
+Combine them into a single data frame.
+
+Plot the tract-wise rental against the median household income and comment.
+
+```{r, warning=FALSE}
+v22 <- load_variables(2022, "acs5", cache = TRUE)
+
+medincome = "B19013_001E"
+medrental = "B25064_001"
+
+income_data <- get_acs(geography = "tract", variables = medincome, state = "NJ")
+
+rental_data <- get_acs(geography = "tract", variables = medrental, state = "NJ")
+
+nj_data <- left_join(income_data, rental_data, by = "GEOID") %>% 
+  rename("Name" = NAME.x, "medincome" = estimate.x, "medrental" = estimate.y) %>% 
+  select(Name, medincome, medrental)
+```
+
+```{r, warning=FALSE}
+ggplot(nj_data, aes(x = medincome, y = medrental)) +
+  geom_point() +
+  geom_smooth() +
+  labs(x = "Median Household Income", y = "Median Rental") +
+  ggtitle("Tract-wise Rental vs. Median Household Income")
+```
+
+Linear Relationship: It's noted that there appears to be a linear relationship between median rental and median income overall. This suggests that, on average, as income increases, rental prices also tend to increase. This relationship aligns with common expectations in real estate markets.
+Plateau in Rental Increase: Thre is a plateau in rental increase around the income range of 35-40 thousand. This could indicate a potential threshold or saturation point where the impact of income on rental prices diminishes. Further investigation into the factors influencing this plateau could provide valuable insights into regional housing markets or socioeconomic dynamics.
+High-Income Outliers: The observation of high-income outliers with extremely high rental prices is noteworthy. These outliers could represent specific demographic groups, luxury housing markets, or other factors influencing rental prices beyond median income levels. Understanding the drivers behind these outliers could offer insights into the diversity and complexity of rental markets.
+
+### 5.2
+
+Fit a linear regression equation of rental against median household income and report the summary.
+
+```{r}
+lm_model <- lm(medrental ~ medincome, data = nj_data)
+
+r_squared = summary(lm_model)$r.squared
+
+summary(lm_model)
+print(paste("R-squared of the model is", r_squared))
+```
+
+Both coefficients are statistically significant with p-values much smaller, indicating the model is having statistically significant relationship between median household income and median rental Smaller (0.39) R squared indicates that other factors not included in the model may also influence median rental prices.
+
+### 5.3
+
+Looking at the plot, suggest ways to improve the model fit.
+Fit the improved model and report the R-squared.
+
+```{r}
+improved_model <- lm(medrental ~ I(medincome^0.8), data = nj_data)
+
+improved_rsquared = summary(improved_model)$r.squared
+print(paste("R-squared of the improved model is", improved_rsquared))
+```
+
+From the plot we can see that it is slightly curved plot and shows that closer to the origin when income increases, rental increasing with higher rate but then it is almost linear.
+Hence raising 0.8 power to median income improves the model a little bit
+
+### 5.4
+
+Explore additional variables to be included in the model that can further improve R-squared.
+If you find such variables, add them to the model and see if the model fit improves.
+
+```{r, warning=FALSE}
+#Total Population = "B01003_001"
+#Median Age by Sex = "B01002_001"
+#Sex by Age by Employment Status = "B23001_001"
+#Own Children Under 18 Years by Family Type and Age = "B09002_001"
+#Nativity and Citizenship Status in the United States = "B05001_001"
+#Place of Birth by Poverty Status in the Past 12 Months in the United States = "B06012_001"
+
+pop_data <- get_acs(geography = "tract", variables = "B01003_001", state = "NJ")
+
+age_by_sex <- get_acs(geography = "tract", variables = "B01002_001", state = "NJ")
+
+emp_status = get_acs(geography = "tract", variables = "B23001_001", state = "NJ")
+
+own_children  = get_acs(geography = "tract", variables = "B09002_001", state = "NJ")
+
+combined_data <- left_join(income_data, rental_data, by = "GEOID") %>%
+  left_join(pop_data, by = "GEOID") %>%
+  left_join(age_by_sex, by = "GEOID") %>%
+  left_join(emp_status, by = "GEOID") %>%
+  rename("Name" = NAME.x, 
+         "medincome" = estimate.x, 
+         "medrental" = estimate.y,
+         "population" = estimate.x.x,
+         "age_by_sex" = estimate.y.y,
+         "emp_status" = estimate) %>% 
+  select(GEOID, Name, medrental, medincome, population, age_by_sex, emp_status)
+
+combined_data = left_join(combined_data, own_children, by = "GEOID") %>%
+  rename("own_children" = estimate) %>%
+  select(-NAME, -variable, -moe)
+  
+improved_model <- lm(medrental ~ medincome + population + age_by_sex + emp_status + own_children, data = combined_data)
+summary(improved_model)
+
+improve_rsquared = summary(improved_model)$r.squared
+print(paste("R-squared of the improved model is", improve_rsquared))
+```
+Median Income: The coefficient for medincome suggests that for every one unit increase in median income, the median rental price increases by approximately $0.0073.
+Population: The coefficient estimate for population is negative, indicating that an increase in population is associated with a decrease in median rental. However it is not statistically significant (p-value = 0.707), indicating that population does not have a significant linear relationship with median rental price in this model.
+Median age of the population: The coefficient suggests that for every one unit increase in median age, the median rental price decreases by approximately $6.60.
+Employment status, and Number of households with children, none of these variables are statistically significant in predicting median rental price based on their respective p-values.
+
+Overall, while the model including additional predictors appears to have some explanatory power, the improvement compared to the previous model is marginal.
+Further exploration of additional variables or model specifications may be necessary to achieve a more substantial improvement in model fit.
+
+### 5.5
+
+Obtain the rental data for year=2022 (5-year aggregate from 2018-2022) and year=2018 (5-year aggregate from 2014-2018) and plot the percentage changes for each county in a column or bar diagram, in increasing or decreasing order of percentage increase.
+
+```{r, warning=FALSE}
+rental_data_2022 <- get_acs(geography = "county",
+                            variables = "B25064_001E",
+                            year = 2022,
+                            state = "NJ")
+
+rental_data_2018 <- get_acs(geography = "county",
+                            variables = "B25064_001E",
+                            year = 2018,
+                            state = "NJ")
+
+rental_changes <- rental_data_2022 %>%
+  left_join(rental_data_2018, by = "GEOID") %>%
+  mutate(percentage_change = ((estimate.x - estimate.y) / estimate.y) * 100) %>%
+  rename("rent_2022" = estimate.x, "rent_2018" = estimate.y, "Name" = NAME.x) %>%
+  select(GEOID, Name, rent_2022, rent_2018, percentage_change)
+
+ggplot(rental_changes, aes(x = reorder(Name, percentage_change), y = percentage_change)) +
+  geom_col() +
+  coord_flip() +
+  labs(x = "County", y = "Percentage Change in Rental (%)", title = "Percent Change in Rental by County") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```

@@ -1,0 +1,244 @@
+---
+title: "Assignment 1 - Feb 01 2024"
+author: Nancy Soni - ns1583
+format: html
+execute: 
+  echo: True
+editor: visual
+---
+
+```{r}
+if(!require(tinytex)) install.packages("tinytex",repos = "http://cran.us.r-project.org")
+```
+
+## Problem 1
+
+### 1.a
+
+Convert the csv file to a tibble in Rstudio and print the tibble (not more than 10 rows).
+
+```{r}
+library(tidyverse)
+
+#convert the csv file to a tibble
+realtor_data <- read.csv("realtor-data.csv")
+
+#print first 10 rows of the tibble
+head(realtor_data, n=10)
+```
+
+### 1.b
+
+The scatter plot of house_size versus price from the realtor data set for New Brunswick, New Jersey (slide deck 1, slide 57) showed a warning sign that 209 rows containing missing values were removed. Verify that this is true by writing a code. How many of these missing values are for house_size and how many are for price?
+
+```{r}
+realtor_data_NJ_NB <- filter(realtor_data, state=="New Jersey", city=="New Brunswick")
+
+#count the number of missing values in house size and price columns
+NA_in_house_size <- sum(is.na(realtor_data_NJ_NB$house_size))
+NA_in_price <- sum(is.na(realtor_data_NJ_NB$price))
+
+#print the results
+cat("Total number of missing values in house_size and price is", sum(NA_in_price, NA_in_house_size),"\n")
+cat("Number of missing values in house_size is", NA_in_house_size,"\n")
+cat("Number of missing values in price is", NA_in_price,"\n")
+```
+
+### 1.c
+
+Similar to (b), find the number of missing values in the columns for variables bed and bath.
+
+```{r}
+#count and print the number of missing values in bed and baths columns
+cat("Number of missing values in column Bed is", sum(is.na(realtor_data_NJ_NB$bed)),"\n")
+cat("Number of missing values in column Bath is", sum(is.na(realtor_data_NJ_NB$bath)),"\n")
+```
+
+### 1.d
+
+Create a tibble named realtor_data_NJ_NB_nomissing that contains no missing value in any column. What is the dimension of this tibble (i.e., how many rows and columns does it have)?
+
+```{r}
+#create a tibble without missing values
+realtor_data_NJ_NB_nomissing = tibble(na.omit(realtor_data_NJ_NB))
+
+#checking the dimensions of the tibble
+dim(realtor_data_NJ_NB_nomissing)
+
+#print the results
+cat("Dimension of realtor_data_NJ_NB_nomissing is", nrow(realtor_data_NJ_NB_nomissing), "rows and", ncol(realtor_data_NJ_NB_nomissing), "columns", "\n")
+```
+
+### 1.e
+
+Obtain a scatter plot of house_area versus price as done with the full data set for New Brunswick.
+
+```{r}
+ggplot(realtor_data_NJ_NB_nomissing, mapping = aes(house_size, price)) + geom_point() + labs(title = "House size vs price")
+```
+
+### 1.f
+
+Remove the points corresponding to the maximum values of house_area and price in the plot, and obtain the scatter plot again.
+
+```{r}
+#filter the tibble removing max points of house size and price
+realtor_data_NJ_NB_nomissing_filtered = realtor_data_NJ_NB_nomissing %>% filter(house_size < max(house_size), price < max(price))
+
+#plotting scatter plot again after removing max points
+ggplot(realtor_data_NJ_NB_nomissing_filtered, aes(house_size, price)) + geom_point() + labs(title = "House size vs price after removing max values")
+```
+
+### 1.g
+
+Obtain box plots of prices stratified by number of baths
+
+```{r}
+ggplot(realtor_data_NJ_NB_nomissing, mapping = aes(factor(bath),price)) + geom_boxplot() + labs(title = "Box plot of baths vs price")
+```
+
+## Problem 2
+
+Install the package "babynames"
+
+```{r}
+if(!require(babynames)) install.packages("babynames",repos = "http://cran.us.r-project.org")
+library(babynames)
+library(tidyverse)
+```
+
+### 2.a
+
+Plot the number of male and female babies named Taylor *by year* in a single plot.
+
+```{r}
+babynames %>% filter(name == "Taylor") %>%
+  ggplot(aes(x = year, y = n, fill = sex)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "# of Babies Named Taylor by Year",
+       x = "Year",
+       y = "Count",
+       color = "Gender")
+```
+
+### 2.b
+
+Plot the number of male and female babies named Quinn *by year* from 1991 onward. During the nineties, were there more male Quinns or more female Quinns? Did this trend change? Approximately when?
+
+```{r}
+babynames %>% filter(name == "Quinn", year >= 1991) %>%
+  ggplot(aes(x = year, y = n, fill = sex)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "# of Babies Named Quinn by Year from 1991",
+       x = "Year",
+       y = "Count")
+```
+
+During the nineties, there were more than approximately 50% male Quinns than female Quinns, but this trend started changing in 2010 and since then, there are approximately 60% more female Quinns than male Quinns.
+
+### 2.c
+
+Plot the number of female babies named Susan *by year*. When did the number of births with female named "Susan" reach its peak? An approximate answer from the graph, e.g., 1980-1985 will be fine.
+
+```{r}
+babynames %>% filter(name == "Susan", sex == "F") %>%
+  ggplot(aes(x = year, y = n)) +
+  geom_line(color = "blue") +
+  labs(title = "# of Female Babies Named Susan by Year",
+       x = "Year",
+       y = "Count")
+```
+
+From the graph we can determine that number of female births with name "Susan" reached its peak approximately in 1953-1957, 1955 being the maximum
+
+### 2.d
+
+Find the top five female names in the year 2017.
+
+```{r}
+babynames %>% filter(sex == "F", year == 2017) %>% arrange(desc(n)) %>% select(name, n) %>% print(n=5)
+```
+
+## Problem 3
+
+### 3.a
+
+Convert NYRestaurantInspection2024.csv. to a tibble.
+
+```{r}
+library(tidyverse)
+NYRestaurantInspection2024 = tibble(read.csv("NYRestaurantInspection2024.csv"))
+```
+
+### 3.b
+
+Form a new data frame restricted to restaurants in Queens with cuisine equal to "Pizza".
+
+```{r}
+Queens_Pizza = NYRestaurantInspection2024 %>% filter(BORO == "Queens", CUISINE.DESCRIPTION == "Pizza")
+```
+
+### 3.c
+
+What are the 5 most frequently inspected restaurants (use the variable "DBA") in the data frame and how many times have each of them been inspected? Note that the same restaurant may be entered under different names, e.g., Mcdonalds and Mcdonald's - they should be treated as the same restaurant.
+
+```{r}
+Queens_Pizza %>%
+  group_by(DBA) %>%
+  summarise(total_inspections = n()) %>%
+  arrange(desc(total_inspections))
+```
+
+### 3.d
+
+On what dates has pizza parlor "SUSANO'S PIZZERIA & RESTAURANT" been inspected?
+
+```{r}
+(Inspected = Queens_Pizza %>% filter(DBA == "SUSANO'S PIZZERIA & RESTAURANT") %>% distinct(INSPECTION.DATE))
+```
+
+## Problem 4
+
+### 4.a
+
+```{r}
+if(!require(gapminder)) install.packages("gapminder",repos = "http://cran.us.r-project.org")
+library(tidyverse)
+library(gapminder)
+```
+
+Create a plot to compare the distributions of the Gini coefficient in different continents.
+
+```{r}
+gapminder1 = read_tsv("gapminder_2007_gini.tsv")
+
+gapminder1 %>% ggplot(aes(x=continent, y=gini)) + geom_boxplot()
+```
+
+### 4.b
+
+Does the Gini coefficient appear to have any impact on the life expectancy in 2007? Explain your answer using a plot, classified by continents.
+
+```{r}
+gapminder1 %>% ggplot(aes(gini, lifeExp, color = continent)) + geom_point() + geom_smooth(method = "lm", se=FALSE) + labs(x="Gini Coefficient", y="Life Expectancy", title = "Gini vs Life Expectancy in 2007")
+```
+
+Looking at the graph, we can observe that Europe and Americas have always had highest life expectancy (we cannot say anything confidently about Oceania since it has only 2 data points in 2007). One of the most important observation is, Asia's life expectancy has notably increased with increased Gini coefficient which is opposite to other continents.
+
+### 4.c
+
+Using the original gapminder data frame available in the package gapminder, generate a data frame with a new variable called gdp by multiplying the population size by the gdp per capita. To make those large numbers more understandable, form an additional new variable called gdp_ratio equal to the gdp divided by the gdp of the United States in 2007. Find the median gdp_ratio by continent and year, and then plot the median gdp_ratio over time, distinguishing the continents. Please use both points and lines for the plot.
+
+```{r}
+gapminder_n = gapminder %>% 
+  mutate(gdp = pop*gdpPercap)
+gapminder_n
+
+gdp_US_2007 = filter(gapminder_n, country == "United States", year == 2007) %>% select(gdp)
+
+gapminder_new = gapminder_n %>% mutate(gdp_ratio = gdp/12900000000000)
+
+medians = gapminder_new %>% group_by(continent, year) %>% summarise(med = median(gdp_ratio))
+medians %>% ggplot(aes(year, med, color = continent)) + geom_point() + geom_line()
+
+```

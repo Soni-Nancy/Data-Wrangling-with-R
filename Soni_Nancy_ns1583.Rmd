@@ -1,0 +1,370 @@
+---
+title: "Stat 597 Fall 2024 Midterm Exam"
+author: "Nancy Soni"
+output:
+  html_document: default
+---
+
+Instructions: Provide your answers in this R markdown file by entering code chunks in the designated space after each part of each question. Please upload the markdown file and the pdf generated from it on the Canvas website after you are done. Name your files as lastname_firstname_netid.extension. For example, my submissions would be named Dasgupta_Tirthankar_td370.Rmd and Dasgupta_Tirthankar_td370.pdf. Also, enter your name and netid in this file. Finally, if you use a web-based AI like ChatGPT, please mention it in the designated space below with information on the problem and parts where you used it. Using ChatGPT WILL NOT BE CONSIDERED AS A DISCREDIT.
+
+I used chatGPT in most of the question and modified afterwards
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(nycflights13)
+library(lubridate)
+```
+
+## NAME AND NETID: NAME:NANCY SONI NETID:NS1583
+
+## Did you use any net-based AI like ChatGPT in this exam (just type Yes or No
+
+## If your answer to the previous problem is Yes, please indicate the problem numbers/parts where you used it
+
+# PROBLEM 1 (25 points)
+
+This problem pertains to the mpg dataframe shown below
+
+```{r echo=TRUE}
+mpg
+```
+
+(a)[2 points] In an attempt to subset this data frame only with Toyota Camry cars the following code was written:
+
+filter(mpg, manufacturer == "toyota" \| model == "camry")
+
+What is wrong with this line? Provide the correct code.
+
+```{r echo=TRUE}
+filter(mpg, manufacturer == "toyota", model == "camry")
+```
+
+Ans(a) There should be AND (,) instead of OR (\|)
+
+(b)[2 points] Provide a visual representation of the distribution of the class of cars. Which two classes have the highest frequency?
+
+```{r echo=TRUE}
+mpg %>% group_by(class) %>% ggplot(aes(x=class)) + geom_bar() + labs(x = "Car Class", y = "Frequency", title = "Distribution of Car Classes")
+```
+
+Ans(b) As can be seen in the plot, SUV and compact classes have highest frequency.
+
+(c)[2 points] Provide a visual representation of the distribution of highway miles (hwy), stratified by number of cylinders (cyl), in a single plot. What is your conclusion from the plot?
+
+```{r echo=TRUE}
+mpg %>% ggplot(aes(x = as.factor(cyl), y = hwy)) +
+  geom_boxplot() + labs(x = "Number of Cylinders", y = "Highway Miles per Gallon", 
+       title = "Distribution of Highway Miles by Number of Cylinders")
+```
+
+From the plot we can conclude that cars with less numbers of cylinders (4 & 5) have more highway miles per gallon (mileage)
+
+(d)[2 points] Provide a visualization representation of the relationship or association between city (city miles) and hwy (hwy miles).What is your conclusion from the plot?
+
+```{r echo=TRUE}
+mpg %>% ggplot(aes(x = cty, y = hwy)) +
+  geom_point() +
+  labs(x = "City Miles per Gallon", y = "Highway Miles per Gallon", 
+       title = "Relationship between City and Highway Miles") +
+  geom_smooth() +
+  theme_minimal()
+
+```
+
+Ans(d) It can be seen that City Miles per Gallon and Highway Miles per Gallon have nearly linear relationship, little more highway miles at city miles between 15 to 20
+
+(e)[2 points] Is there any car in this data frame that has strictly lower highway miles than city miles? Write one line of code to justify your answer.
+
+```{r echo=TRUE}
+mpg %>% filter(hwy < cty)
+```
+
+Ans(e) There is no car which has highway miles lower than city miles.
+
+(f)[2 points] Is there any car in this data frame that has highway miles exactly equal to city miles? Write one line of code to justify your answer.
+
+```{r echo=TRUE}
+mpg %>% filter(hwy == cty)
+```
+
+There is no such car with city miles equals to highway miles.
+
+```{r}
+mpg
+```
+
+(g)[4 points] Which make and model (e.g., Honda Civic or Toyota Camry) of cars has the highest mean difference between the highway miles and city miles?
+
+```{r echo=TRUE}
+mpg %>% group_by(manufacturer, model) %>% 
+  summarise(Mean_city_miles = mean(cty), 
+            Mean_highway_miles = mean(hwy), 
+            Mean_diff = abs(Mean_city_miles-Mean_highway_miles)) %>%
+  arrange(desc(Mean_diff))
+```
+
+(h)[4 points] Filter the dataframe to retain all observations for manufacturers honda, toyota and nissan and show the mean highway miles for all models created by these manufacturers for each year (1999 and 2008) in a 6x3 tibble that has the following columns: manufacturer (honda, toyota or nissan), year (1999 or 2008) and m = mean highway miles. Display the tibble and save it by the name Comparison.
+
+```{r echo=TRUE}
+Comparison = mpg %>% filter(manufacturer %in% c("honda", "toyota", "nissan"), year %in% c(1999, 2008)) %>% group_by(manufacturer, year) %>% summarise(m=mean(hwy)) %>% select(manufacturer, year, m)
+```
+
+(i)[3 points] Using the dataframe Comparisons created in part (h), create a single plot showing the mean highway miles over years, with a different color used for each manufacturer. Interpret the plot.
+
+```{r echo=TRUE}
+Comparison %>% ggplot(aes(x = factor(year), y = m, fill = manufacturer)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(x = "Year", y = "Mean Highway Miles", 
+       title = "Mean Highway Miles Over Years by Manufacturer", fill = "Manufacturer")
+```
+
+(j)[2 points] Convert the data in the Comparisons tibble created in part (h) to a wide form, showing the mean hwy data in two columns titled 1999 and 2008.
+
+```{r echo=TRUE}
+Comparison %>% pivot_wider(names_from = year, values_from = m)
+```
+
+# PROBLEM 2 (15 points)
+
+Consider the output from a linear regression of city miles (cty) on engine displacement (displ) using the data from the mpg data frame.
+
+```{r echo=TRUE}
+cty_disp <- mpg %>% lm(cty ~ displ, data = .)
+```
+
+The summary obtained from this model is given below:
+
+```{r echo=TRUE}
+summary(cty_disp)
+```
+
+(a)[2 points] Extract the value of the Adjusted R-squared (not by just typing it as 0.6361 as seen from the above table), but using an appropriate extraction command from the summary object.
+
+```{r echo=TRUE}
+print(summary(cty_disp)$adj.r.squared)
+```
+
+(b)[4 points] Extract the degrees of freedom of the F-statistic (seen as 1 and 232 in the table)
+
+```{r echo=TRUE}
+print(summary(cty_disp)$fstatistic[c(2,3)])
+```
+
+(c)[4 points] Extract the vector of t values, i.e, you should obtain the vector (53.91, -20.20) in your output
+
+```{r echo=TRUE}
+print(summary(cty_disp)$coefficients[, "t value"])
+```
+
+(d)[5 points] Obtain the vector of residuals and plot a histogram with 15 bins. What do you interpret from the plot?
+
+```{r echo=TRUE}
+residuals = residuals(cty_disp)
+ggplot(data.frame(residuals), aes(residuals)) + 
+  geom_histogram(bins = 15, fill = "skyblue", color = "black") + 
+  labs(title = "Histogram of Residuals", x = "Residuals", y = "Frequency")
+```
+
+# Problem 3 [30 points]
+
+Recall from the midterm practice problem that the sample autocorrelation function of lag $h (>0)$ from a vector of observations $(x_1, \ldots, x_n)$ is given by
+
+$$ r(h) = \frac{\sum_{i=1}^{n-h} (x_{i+h} - \overline{x})(x_{i} - \overline{x} ) }{\sum_{i=1}^n (x_i - \overline{x})^2}, $$ where $\overline{x} = \sum_{i=1}^n x_i / n$ denotes the mean of all observations.
+
+The acf() function can be used to obtain the sample autocorrelations of all possible lags from 0 to $n-1$ from an $n$-dimensional vector $y$ of observations. See the following code chunk, for example:
+
+```{r, echo=TRUE, plot=FALSE}
+set.seed(37)
+y = rnorm(10)
+acf(y)[[1]]
+```
+
+In the midterm practice, we developed the following function acf_calc() that takes a vector of observations $y$ and an integer-valued lag input $h$ and returns the corresponding sample autocorrelation coefficient.
+
+```{r echo=TRUE}
+acf_calc = function(y,h) {
+  n = length(y)
+  u<- y[(h+1):n]
+  v<- lag(y,h)[(h+1):n]
+  num <- sum((u - mean(y))*(v-mean(y)))
+  den <- sum((y - mean(y))^2)
+  num/den  
+}
+```
+
+Write a function acf_calc_all() based on the function acf_calc() that would take an $n$-dimensional data vector $y$ as a input and calculate sample autocorrelations of all possible lags $h = 0, \ldots, n-1$ and generate an output similar to the one generated by the acf() function. The function should return a list as output - the first element should be a tibble with two columns - lag(h) and the corresponding autocorrelation. The second element of the list should be the ACF plot similar to the one shown in the plot, with the same x and y axis labels as generated by the acf() function. Ignore the confidence intervals.
+
+Demonstrate that your function works by using the same $y$ used above to demonstrate the acf() function.
+
+```{r echo=TRUE}
+acf_calc_all <- function(y) {
+  n <- length(y)
+  lags <- 0:(n - 1)
+  autocorrelations <- map_dbl(lags, ~acf_calc(y, .x))
+  
+  # Create a tibble with lag and autocorrelation columns
+  acf_table <- tibble(lag = lags, autocorrelation = autocorrelations)
+  
+  # Create ACF plot
+  acf_plot <- ggplot(acf_table, aes(x = lag, y = autocorrelation)) +
+    geom_bar(stat = "identity", width = 0.03) +
+    labs(title = "Series Y", x = "Lag", y = "ACF") +
+    geom_hline(yintercept = 0) +
+    geom_hline(yintercept = c(-1.96/sqrt(n), 1.96/sqrt(n)), linetype = "dashed", color = "blue") +
+    theme_minimal() + theme(
+      plot.title = element_text(hjust = 0.5),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      axis.line = element_line(size = 0.5, color = "black"),
+      panel.border = element_rect(color = "black", fill = NA, size = 0.5)
+    )
+  
+  list(acf_table = acf_table, acf_plot = acf_plot)
+}
+
+result <- acf_calc_all(y)
+result$acf_table  # Display autocorrelation table
+print(result$acf_plot)  # Display ACF plot
+```
+
+# Problem 4 [40 points]
+
+Recall the flights dataframe in the nycflights2013 package. This package also contains other dataframes, one of which is weather, that provides information on hourly weather on each day of the year at each airport.
+
+```{r echo=TRUE}
+weather
+```
+
+(a)[3 points] Does (origin, year, month, day, hour) constitute a primary key for this dataframe? Explain your answer.
+
+```{r echo=TRUE}
+print(weather %>% group_by(origin, year, month, day, hour) %>% summarise(count=n()) %>% filter(count > 1))
+```
+
+
+(b)[3 points] If the answer to (a) is NO, can you provide a plausible explanation of the fact that (origin, year, month, day, hour) is not a primary key?
+
+```{r echo=TRUE}
+#(origin, year, month, day, hour) cannot be a primary key as there are more than one rows for the same
+#key which can be seen in the above answer. Logically, there could be more than one fight departed at
+#the same time and location. Therefore this cannot be a primary key.
+```
+
+(c)[4 points] Summarize the day-wise total precipitation information for each airport, i.e., create a tibble airport_precip with columns origin, year, month, day, totalprecip (total precipitation recorded at that airport on that day).
+
+```{r echo=TRUE}
+airport_precip = weather %>% group_by(origin, year, month, day) %>%
+  summarise(totalprecip = sum(precip, na.rm = TRUE))
+
+print(head(airport_precip,10))
+```
+
+(d)[5 points] Create a new tibble titled airport_precip_date by replacing the three columns (year, month, day) of the tibble airport_precip by a single column titled fulldate that has dates in a valid date format. Thus the new tibble should have three columns - origin, fulldate and totalprecip.
+
+```{r echo=TRUE}
+airport_precip_date <- airport_precip %>%
+  mutate(fulldate = make_date(year, month, day)) %>% ungroup() %>%
+  select(origin, fulldate, totalprecip)
+
+print(head(airport_precip_date,10))
+```
+
+(e)[3 points] On how many days in the year did it rain (precipitation \> 0 recorded) at each airport?
+
+```{r echo=TRUE}
+days_with_rain <- airport_precip_date %>%
+  group_by(origin) %>%
+  filter(totalprecip > 0) %>%
+  summarise(days_with_rain = n())
+
+print(days_with_rain)
+```
+
+(f)[5 points] Find the dates on which it rained \underline{both} at EWR and at JFK (you don't need to display all the dates - just print the top of the tibble)?
+
+```{r echo=TRUE}
+ewr_rain <- airport_precip_date %>%
+  filter(origin == "EWR", totalprecip > 0) %>%
+  select(fulldate)
+
+jfk_rain <- airport_precip_date %>%
+  filter(origin == "JFK", totalprecip > 0) %>%
+  select(fulldate)
+
+# Inner join to find dates that appear in both sets
+dates_with_rain_at_both <- inner_join(ewr_rain, jfk_rain, by = "fulldate")
+
+# Print the top of the resulting tibble
+print(head(dates_with_rain_at_both))
+
+```
+
+(g)[5 points] Obtain a scatter plot of the precipitation at JFK versus precipitation at EWR on the days it rained at both airports. How well can you predict precipitation at one airport if you knew the amount of precipitation at the other? Just provide an answer on the basis of the plot.
+
+```{r echo=TRUE}
+
+days_with_rain_both <- airport_precip_date %>%
+  filter(origin %in% c("JFK", "EWR"), totalprecip > 0)
+
+# Create scatter plot
+ggplot(days_with_rain_both, aes(x = totalprecip, y = totalprecip, color = origin)) +
+  geom_point() +
+  labs(title = "Precipitation at JFK vs. EWR on Days It Rained at Both Airports",
+       x = "Precipitation at JFK",
+       y = "Precipitation at EWR",
+       color = "Airport") +
+  theme_minimal()
+```
+
+(h)[3 points] Find the dates on which it rained at EWR but not at JFK.
+
+```{r echo=TRUE}
+# Filter data for precipitation at EWR and JFK
+ewr_rain <- airport_precip_date %>%
+  filter(origin == "EWR", totalprecip > 0)
+
+jfk_no_rain <- airport_precip_date %>%
+  filter(origin == "JFK", totalprecip == 0)
+
+# Find dates on which it rained at EWR but not at JFK
+dates_rained_at_ewr_not_jfk <- inner_join(ewr_rain, jfk_no_rain, by = "fulldate") %>% select(fulldate)
+
+# Print the result
+print(dates_rained_at_ewr_not_jfk)
+
+```
+
+(i)[3 points] Find the dates on which it rained at JFK but not at EWR.
+
+```{r echo=TRUE}
+# Filter data for precipitation at JFK and EWR
+jfk_rain <- airport_precip_date %>%
+  filter(origin == "JFK", totalprecip > 0)
+
+ewr_no_rain <- airport_precip_date %>%
+  filter(origin == "EWR", totalprecip == 0)
+
+# Find dates on which it rained at JFK but not at EWR
+dates_rained_at_jfk_not_ewr <- inner_join(jfk_rain, ewr_no_rain, by = "fulldate") %>% select(fulldate)
+
+# Print the result
+print(dates_rained_at_jfk_not_ewr)
+
+```
+
+(j)[6 points] Starting from the airport_precip tibble created in part (c), create a $12 \times 2$ tibble showing the total (over all days and airports) precipitation for each month. Plot the monthly total precipitation. Which months had the maximum and minimum precipitations?
+
+```{r echo=TRUE}
+monthly_precip <- airport_precip %>%
+  group_by(month) %>%
+  summarise(total_precipitation = sum(totalprecip))
+
+print(monthly_precip)
+
+ggplot(monthly_precip, aes(x = month, y = total_precipitation)) +
+  geom_bar(stat = "identity", fill = "skyblue", color = "black") +
+  labs(title = "Monthly Total Precipitation",
+       x = "Month",
+       y = "Total Precipitation") +
+  theme_minimal()
+```

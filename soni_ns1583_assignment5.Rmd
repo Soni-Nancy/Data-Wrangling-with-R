@@ -1,0 +1,323 @@
+---
+title: "Untitled"
+author: "Nancy Soni"
+date: "2024-04-02"
+output: html_document
+---
+
+```{r, warning=FALSE, message=FALSE}
+library(tidyverse)
+library(rvest)
+library(tidytext)
+library(gutenbergr)
+library(gapminder)
+library(modelr)
+library(gridExtra)
+library(tidyr)
+library(broom)
+library(ggbeeswarm)
+library(gdata)
+library(topicmodels)
+```
+
+## Problem 1
+
+Download the texts of all novels in the gutenbergr package authored by "Stevenson", i.e., all documents for which the author's name contains "Stevenson". Do not worry if you get an error message that the text of one or more novels could not be downloaded. Proceed with the documents that you can download.
+
+Tidy the data by converting it to a one-token-per-line form, removing stop-words and doing any cleaning you think is appropriate.
+
+Convert the tibble into a document-term matrix. Perform a Latent Dirichlet Analysis (LDA) on the DTM with K=2.
+
+```{r, warning=FALSE, message=FALSE}
+stevenson_novels = gutenberg_metadata %>% 
+  filter(str_detect(author, ".*Stevenson.*"), language == "en")
+
+stevenson_download = gutenberg_download(stevenson_novels$gutenberg_id)
+```
+
+```{r, warning=FALSE, message=FALSE}
+stevenson_download_words = 
+  stevenson_download %>%
+  unnest_tokens(word, text) %>%
+  mutate(word = str_replace_all(word, "_", "")) %>%
+  anti_join(stop_words, by = "word") %>%
+  filter(!word %in% c("v", "i", "iv", "ii", "iii", "vi", "vii", "viii", "ix", "x", "xi", "xii", "xiii"),
+         !str_detect(word, "\\d+"))
+```
+
+```{r, warning=FALSE, message=FALSE}
+dtm <- stevenson_download_words %>%
+  count(gutenberg_id, word) %>%
+  cast_dtm(document = gutenberg_id, term = word, value = n)
+
+lda_model <- LDA(dtm, k = 2)
+
+head(tidy(lda_model),10)
+```
+
+#### 1)
+
+Find the top 15 words associated with each topic (i.e., maximum beta probabilities) and plot them.
+
+```{r, warning=FALSE, message=FALSE}
+# Top terms in Topic 1
+top_15_topic_1 = tidy(lda_model) %>% filter(topic==1) %>% 
+  na.omit(term) %>%
+  mutate(beta_rank = min_rank(desc(beta))) %>%
+  filter(beta_rank <= 15) %>%
+  arrange(beta_rank)
+top_15_topic_1
+
+# Top terms in Topic 2
+top_15_topic_2 = tidy(lda_model) %>% filter(topic==2) %>% 
+  na.omit(term) %>%
+  mutate(beta_rank = min_rank(desc(beta))) %>%
+  filter(beta_rank <= 15) %>%
+  arrange(beta_rank)
+top_15_topic_2
+
+# Plots
+
+topic_1 = top_15_topic_1 %>%
+  mutate(term = reorder(term, beta)) %>%
+  ggplot(aes(beta, term)) +
+  geom_col(show.legend = FALSE) +
+  labs(title = "Top Words Associated with Topic 1", x = "Beta Probability", y = "Term")
+
+topic_2 = top_15_topic_2 %>%
+  mutate(term = reorder(term, beta)) %>%
+  ggplot(aes(beta, term)) +
+  geom_col(show.legend = FALSE) +
+  labs(title = "Top Words Associated with Topic 2", x = "Beta Probability", y = "Term")
+
+grid.arrange(topic_1, topic_2, nrow = 1)
+```
+
+#### 2)
+
+Based on the words identified in (a), what is your interpretation of this classification of documents into topics?
+
+Topic 1:
+
+Words like "time", "day", "night", "life", "heart", and "cried", "Hand", "house", and "eyes""Hand", "house", and "eyes" suggest a theme related to daily life, emotions, and experiences or terms related to humans.
+
+Topic 2:
+
+Words like "rock", "sea", "water", and "pearls", "light", "found" evoke images of natural elements, landscapes, and exploring or discovering nature.
+
+Overall, Topic 1 seems to be more centered around human experiences and emotions, while Topic 2 appears to focus more on natural elements and exploration.
+
+#### 3)
+
+Find the documents that could be associated with one of the two topics with a maximum probability of 0.99 or more, and from gutenberg matadata, check if your interpretation of this classification appears correct.
+
+```{r, warning=FALSE, message=FALSE}
+document_topics = lda_model %>% tidy(matrix="gamma") %>%
+  group_by(document) %>%
+  slice_max(gamma) %>%
+  filter(gamma >= 0.99)
+
+document_topics %>%
+  mutate(document = as.numeric(document)) %>%
+  left_join(gutenberg_metadata, by = c("document" = "gutenberg_id")) %>%
+  select(document, title, topic, gamma, author) %>%
+  head(10)
+```
+
+Above previous states that topic 2 is associated with natural elements, landscapes and exploration and the above results verifies that results. The books here in topic 2 are below whose names suggests that they revolves around the same topics like exploration, nature etc.
+
+1)  Terrestrial and Celestial Globes: Their History and Construction Including a Consideration of their Value as Aids in the Study of Geography and Astronomy
+2)  An Account of the Bell Rock Light-House
+3)  A General History and Collection of Voyages and Travels...
+
+Some of the books with topic 1 are listed below, which shows that they focuses human experiences and emotions as found previously
+
+1)  The Holladay Case: A Tale
+2)  The Gloved Hand
+3)  Life of Robert Stevenson, Civil Engineer
+4)  The path of honor: A tale of the war in the Bocage
+
+Hence the above interpretations are correct
+
+## Problem 2
+
+#### 1)
+
+Split/group the gapminder data by country. For each country, fit an ARIMA(0,0,1) or MA(1) model to lifeExp, and produce a tibble that contains the country-wise values of AIC and BIC, two measures of goodness of model fit. Obtain a scatter plot of AIC versus BIC and comment.
+
+```{r, warning=FALSE, message=FALSE}
+`001` <- gapminder %>%
+  group_by(continent, country) %>%
+  summarise(model = list(arima(lifeExp, order = c(0, 0, 1)))) %>%
+  mutate(AIC = map_dbl(model, ~ AIC(.x)),
+         BIC = map_dbl(model, ~ BIC(.x))) %>%
+  select(-model)
+head(`001`, 10)
+
+ggplot(`001`, aes(x = AIC, y = BIC)) +
+  geom_point() +
+  labs(x = "AIC", y = "BIC", title = "AIC vs BIC for ARIMA Models")
+```
+
+Looking at the scatter plot of AIC vs BIC, we can deduce that AIC and BIC are proportionately related with each other.
+
+#### 2)
+
+Now repeat the previous step for four other models: ARIMA(0,0,1), ARIMA(0,0,2), ARIMA(0,0,3), ARIMA(0,1,0), ARIMA(0,1,1), and in a single plot, show boxplots of AIC values for the five models. Based on the boxplot, which of these five models do you think fits the data best for most countries?
+
+```{r, warning=FALSE, message=FALSE}
+`002` <- gapminder %>%
+  group_by(continent, country) %>%
+  summarise(model = list(arima(lifeExp, order = c(0, 0, 2)))) %>%
+  mutate(AIC = map_dbl(model, ~ AIC(.x)),
+         BIC = map_dbl(model, ~ BIC(.x))) %>%
+  select(-model)
+
+`003` <- gapminder %>%
+  group_by(continent, country) %>%
+  summarise(model = list(arima(lifeExp, order = c(0, 0, 3)))) %>%
+  mutate(AIC = map_dbl(model, ~ AIC(.x)),
+         BIC = map_dbl(model, ~ BIC(.x))) %>%
+  select(-model)
+
+`010` <- gapminder %>%
+  group_by(continent, country) %>%
+  summarise(model = list(arima(lifeExp, order = c(0, 1, 0)))) %>%
+  mutate(AIC = map_dbl(model, ~ AIC(.x)),
+         BIC = map_dbl(model, ~ BIC(.x))) %>%
+  select(-model)
+
+`011` <- gapminder %>%
+  group_by(continent, country) %>%
+  summarise(model = list(arima(lifeExp, order = c(0, 1, 1)))) %>%
+  mutate(AIC = map_dbl(model, ~ AIC(.x)),
+         BIC = map_dbl(model, ~ BIC(.x))) %>%
+  select(-model)
+
+all_aic_bic = combine(`001`, `002`, `003`, `010`, `011`)
+
+ggplot(all_aic_bic, aes(source, AIC)) + geom_boxplot()
+```
+
+In the above plot, model ARIMA(0,1,1) has lowest values and lowest spread, however, there are few outliers. Hence we can say that, model 011 fits best for most countries.
+
+#### 3)
+
+Filter the data only for continent Europe. For the best model identified in step 2, create a tibble showing the country-wise model parameters (moving average coefficients) and their standard errors using the broom package.
+
+```{r, warning=FALSE, message=FALSE}
+europe_models <- gapminder %>% 
+  filter(continent == "Europe") %>%
+  group_by(country) %>%
+  nest() %>%
+  mutate(
+    arima_model = map(data, ~ arima(.$lifeExp, order = c(0, 1, 1))),
+    parameters = map(arima_model, tidy)
+  ) %>%
+  select(-data, -arima_model) %>%
+  unnest(parameters) %>%
+  select(-term)
+
+head(europe_models, 10)
+```
+
+## Problem 3
+
+For the gapminder data, perform the following operations, using the tidyr::nest() function and data frames with list-columns:
+
+#### 1)
+
+Fit a separate linear model of log10(gdpPercap) on year for each country.
+
+```{r, warning=FALSE, message=FALSE}
+gap_nested <- gapminder %>%
+  group_by(country, continent) %>%
+  nest()
+
+country_lm <- function(df){
+  lm(log10(gdpPercap) ~ year, data = df)
+}
+
+all_lm <- gap_nested %>% 
+  mutate(model = map(data, country_lm))
+```
+
+#### 2)
+
+Plot residuals against time, showing separate lines for each country in the same plot. Also, do this separately for each continent.
+
+```{r, warning=FALSE, message=FALSE}
+gap_nested_summary <- all_lm %>% 
+    mutate(lm_augment = map(model, augment)) %>%
+  unnest(lm_augment)
+
+gap_nested_summary %>%
+  ggplot(aes(year, `.resid`)) +
+  geom_line(alpha=1/3, aes(group=country)) +
+  geom_smooth(col="green") +
+  labs(title = "Residuals vs Time for Each Country", x = "Year", y = "Residuals")
+```
+
+```{r, warning=FALSE, message=FALSE}
+gap_nested_summary %>%
+  ggplot(aes(year, `.resid`)) +
+  geom_line(alpha=1/3, aes(group=country)) +
+  geom_smooth(col="green") +
+  facet_wrap(~continent) +
+  labs(title = "Residuals vs Time for each Continent", x = "Year", y = "Residuals")
+```
+
+#### 3)
+
+Create a continent-wise Beeswarmplot for (i) value of the estimated slope coefficient and (ii) value of the t-statistic (ratio of estimate and standard error). [Hint: You may need to revisit the materials on broom package]. Interpret the plots.
+
+```{r, warning=FALSE, message=FALSE}
+continent_coefficients <- all_lm %>%
+  mutate(summary = map(model, tidy)) %>%
+  unnest(summary) %>%
+  filter(term == "year") %>%
+  select(country, continent, estimate, statistic)
+
+continent_coefficients %>% ggplot(aes(continent, estimate)) + 
+  geom_boxplot() +
+  geom_beeswarm() +
+  labs(title = "Estimated Slope Coefficient for each Continent", x = "Continent", y = "Slope Coefficient")
+
+continent_coefficients %>% ggplot(aes(continent, statistic)) + 
+  geom_boxplot() +
+  geom_beeswarm() +
+  labs(title = "t-statistic for each Continent", x = "Continent", y = "t-statistics")
+```
+
+In the beeswarm plot for slope coefficient/estimate, we can see that continent Asia has maximum variability but it also shows that its GDP has more positive relationship with time. While looking at the Europe boxplot, it is not spread much and its median is maximum. Which says that its GDP has increased consistently without deviating much.
+
+The larger the t-statistic, the more likely that results will be statistically significant. Here we can see that Europe has highest average t-statistic (we can ignore Oceania as it has very few datapoints) while Africa has lowest.
+
+#### 4)
+
+Identify the countries that have estimated negative slopes and p-values less than 0.05. What is the interpretation of the linear model fit for these countries?
+
+```{r, warning=FALSE, message=FALSE}
+negative_slope_countries <- all_lm %>%
+  mutate(summary = map(model, tidy)) %>%
+  unnest(summary) %>%
+  filter(term == "year") %>%
+  select(country, continent, estimate, p.value) %>%
+  filter(estimate < 0, p.value < 0.05)
+
+negative_slope_countries
+```
+
+For countries with estimated negative slopes and p-values less than 0.05, the interpretation of the linear model fit suggests that there is a statistically significant negative relationship between the GDP and the time. In other words, as time goes by, the GDP tends to decrease. The significant p-value, indicating that the observed relationship is unlikely to have occurred by random chance.
+
+#### 5)
+
+Plot the year-wise log10(gdpPercap) for the countries identified in part 4.
+
+```{r, warning=FALSE, message=FALSE}
+gapminder %>% filter(country %in% negative_slope_countries$country) %>% 
+  ggplot(aes(x = year, y = log10(gdpPercap), color = country)) +
+  geom_line() +
+  geom_smooth(method = "lm", se = FALSE)
+  labs(x = "Year", y = "log10(gdpPercap)", color = "Country")
+```

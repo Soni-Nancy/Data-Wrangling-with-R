@@ -1,0 +1,172 @@
+---
+title: "Assignment 3"
+author: "Nancy Soni"
+date: "2024-02-29"
+output: html_document
+execute:
+  echo = True
+---
+
+```{r, warning=FALSE}
+library(tidyverse)
+library(gapminder)
+```
+
+## Problem 1
+
+#### 1.1
+
+Consider all height entries of the form 68 or 72 or 72.13 (height in inches) as "normal" height data in inches, extract them from the dataframe using appropriate pattern matching methods, and plot, in a single plot, the density of height for men and women. Be careful to exclude numbers like 158 or 170, which represent height in centimeters. You may assume that normal heights of adults in inches would be between 40 and 89 inches.
+
+```{r, warning=FALSE}
+heights = read.fwf('height.txt', widths = c(30), header = T)
+
+colnames(heights) = c("Timestamp", "Gender", "Height")
+
+normal_heights = heights %>% 
+  filter(str_detect(Height, "^\\d+(\\.\\d+)?$"),
+         !is.na(as.numeric(Height)), as.numeric(Height) >= 40, as.numeric(Height) <= 89) %>% mutate(Height = as.numeric(Height))
+
+normal_heights %>% ggplot(aes(as.numeric(Height), color = Gender)) + geom_density() + labs(title = "Height Density Plot for Male & Female", x = "Height in Inches", y = "Density")
+```
+
+#### 1.2
+
+Clean as many of the "abnormal" height answers as you can; do not replace values with hard-coded numbers (i.e., don't type height[29] \<- 62). Do so by creating a new variable for height; don't replace values in the original variable.
+
+```{r, warning=FALSE}
+abnormal_heights = heights
+
+abnormal_heights <- abnormal_heights %>%
+  mutate(Height = str_remove_all(Height, "\""),            #to remove double inverted commas
+         Height = str_replace(Height, "[',]", "\\."),      #replaced ' and , to dot
+         Height = str_replace(Height, "' ", "\\."),        #replaced single quote followed by space with dot in values like 5' 4
+         Height = str_replace(Height, ". ", "\\."),        #replaced dot followed by space with dot in values like 5. 4
+         Height = str_replace(Height, " .", "\\."),        #replaced dot followed by space with dot in values like 5 .4
+         Height = str_replace_all(Height, "[a-z]", "\\."), #to replace format like 5 feet 7 inch
+         Height = str_remove(Height, "[\'\"]+$"),           #to remove ' or " at the end
+         Height = str_remove(Height, "[\\.]+$"))           #to remove one or more dots at the end
+         
+abnormal_heights = abnormal_heights %>% 
+  mutate(Height = as.numeric(Height)) %>%                   #converted Height data to numeric values
+  mutate(Height = ifelse(as.numeric(Height) >= 228 | as.numeric(Height) <= 2, NA, Height))  #removed out of range values
+
+#convert values to inches
+cleaned_data = abnormal_heights %>%
+  mutate(Height = ifelse(as.numeric(Height) >= 100 & as.numeric(Height) <= 227,
+                         as.numeric(Height) * 0.3937,
+                    ifelse(as.numeric(Height) >= 3 & as.numeric(Height) <= 8,
+                           as.numeric(Height) * 12, as.numeric(Height)))) %>% 
+  mutate(Height = round(as.numeric(Height),2))
+
+head(cleaned_data, 10)
+```
+
+#### 1.3
+
+Provide a table of the number of missing values for the new variable by sex.
+
+```{r}
+missing_values = abnormal_heights %>% filter(is.na(Height)) %>% group_by(Gender) %>% count()
+print(missing_values)
+```
+
+#### 1.4
+
+Print all of the original values for height for which your methods could not provide a clean "normal" value.
+
+```{r}
+discarded_values = cleaned_data %>%
+  filter(is.na(Height)) %>%
+  inner_join(heights, by = c("Timestamp", "Gender")) %>% select(-Height.x)
+
+#printing all the values instead of using head(.) as asked
+print(discarded_values)
+
+# it is fetching couple of the normal heights as well as joining cleaned data table and original table fetching heights from original table where it is matching timestamp and gender but they are not actually discarded as can be seen the number of NAs in the last output 
+```
+
+#### 1.5
+
+Plot, in a single plot, the density of height for men and women.
+
+```{r, warning=FALSE}
+cleaned_data %>% filter(Height >= 40 & Height <= 89) %>% ggplot(aes(Height, color = Gender)) + geom_density() +
+  labs(title = "Height Density for Men & Women", x = "Height", y = "Density")
+```
+
+## Problem 2
+
+#### 2.1
+
+From the heights data, convert the timestamp column into three separate columns indicating the year, month (by name) and day. Now remove the original timestamp column.
+
+```{r}
+d_m_y = heights %>% mutate(Timestamp = as.POSIXct(Timestamp, format = "%Y-%m-%d %H:%M:%S"), Day = lubridate::day(Timestamp), Month = lubridate::month(Timestamp, label = TRUE), Year = lubridate::year(Timestamp)) %>% select(Day, Month, Year, Gender, Height, -Timestamp)
+
+head(d_m_y, 10)
+```
+
+#### 2.2
+
+Filter the data for the year 2015 and plot the number of entries made by month. In which month were the maximum number of entries made?
+
+```{r}
+d_m_y %>% filter(Year == 2015) %>% ggplot(aes(x=Month)) + geom_bar() + labs(title = "Number of Entries for each Month in 2015", y = "Number of Entries", x = "Month")
+```
+
+The maximum number of entries were made in the month of May
+
+## Problem 3
+
+Create a new function that, given an `lm` object, returns the top n residuals arranged in descending order according to their largest absolute values (but returns the residuals, not the absolute value of the residuals), where the default value for n is 5. The function should give a clear error message if n is larger than the number of residuals. Demonstrate that your function works by applying it to
+
+mtcars.lm \<- lm(mpg \~ disp, data = mtcars)
+
+first with no argument for n, then with n = 6, and then with n = 40 (error message expected).
+
+```{r}
+get_top_residuals <- function(lm_object, n = 5) {
+  residuals <- lm_object$residuals
+  
+  if (n > length(residuals)){
+    top_residuals = "n is larger than the number of residuals."
+  } else{
+  top_residuals <- tibble(Residual = residuals, Abs_Residual = abs(residuals)) %>% 
+  arrange(desc(Abs_Residual)) %>% 
+  head(n = n) %>% 
+  select(Residual)
+  return(top_residuals)
+  }
+}
+mtcars.lm <- lm(mpg ~ disp, data = mtcars)
+
+print(get_top_residuals(mtcars.lm))
+
+print(get_top_residuals(mtcars.lm, 6))
+
+print(get_top_residuals(mtcars.lm, n = 40))
+```
+
+## Problem 4
+
+Split the gapminder data by country and use map() to calculate, by country, the R-squared for the linear model lifeExp \~ log10(gdpPercap). Using ggplot2, make a set of boxplots of R-squared by continent.
+
+```{r}
+calculate_r_squared <- function(data) {
+  lm_model <- lm(lifeExp ~ log10(gdpPercap), weights = pop, data = data)
+  return(summary(lm_model)$r.squared)
+}
+gapminder %>%
+  split(.$country) %>%
+  map_dbl(~ calculate_r_squared(.)) %>%
+  enframe(name = "country", value = "r_squared") %>%
+  left_join(select(gapminder, country, continent), by = "country") %>%
+  ggplot(aes(x = continent, y = r_squared, fill = continent)) +
+  geom_boxplot() +
+  labs(title = "R-squared by Country",
+       x = "Country",
+       y = "R-squared") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
